@@ -36,6 +36,12 @@ module regs_bank #(
   
    reg fifo_valid;
    
+   // local parameter for addressing 8 bit of APB_DATA_WIDTH
+   // ADDR_LSB is used for addresssing 8 bit registers/memories
+   // ADDR_LSB = 0 (n downto 0)
+   localparam integer ADDR_LSB = 4;
+   localparam integer OPT_MEM_ADDR_BITS = 3;
+   
    //number of slave registers
    reg [APB_DATA_WIDTH-1:0] slv_reg_0;
    reg [APB_DATA_WIDTH-1:0] slv_reg_1;
@@ -57,6 +63,9 @@ module regs_bank #(
    wire slv_reg_rden;
    wire slv_reg_wren;
    reg [APB_DATA_WIDTH-1:0] reg_data_out;
+   reg [APB_DATA_WIDTH-1:0] reg_pwdata;
+   //reg [APB_DATA_WIDTH-1:0] rdata_tmp;
+   reg [APB_DATA_WIDTH-1:0] reg_fsr, reg_rbr;
 
    wire read_domain;
    wire write_domain;
@@ -73,11 +82,11 @@ module regs_bank #(
    assign slv_reg_wren = PSEL && PENABLE && PWRITE;
    assign slv_reg_rden = PSEL && PENABLE && ~PWRITE;
 
-   assign write_domain = (PADDR[3:0] == 4'h00) || (PADDR[3:0] == 4'h01) ||
-                         (PADDR[3:0] == 4'h01) || (PADDR[3:0] == 4'h03) ||
-                         (PADDR[3:0] == 4'h04) || (PADDR[3:0] == 4'h06) ;
+   assign write_domain = (PADDR[7:4] == 4'h00) || (PADDR[7:4] == 4'h01) ||
+                         (PADDR[7:4] == 4'h01) || (PADDR[7:4] == 4'h03) ||
+                         (PADDR[7:4] == 4'h04) || (PADDR[7:4] == 4'h06) ;
 
-   assign read_domain  = (PADDR[3:0] == 4'h05) || (PADDR[3:0] == 4'h07) ;
+   assign read_domain  = (PADDR[7:4] == 4'h05) || (PADDR[7:4] == 4'h07) ;
 
    /*
       Address iss only valid to be considered when PSEL, PENABLE is high
@@ -98,6 +107,15 @@ module regs_bank #(
                ar_addr <= PADDR;
             end
          end
+      end
+   end
+   
+   always @(posedge PCLK, negedge PRESETN) begin
+      if(!PRESETN) begin
+         reg_pwdata <= APB_ADDR_WIDTH'('hFF);
+      end
+      else begin
+         reg_pwdata <= PWDATA;
       end
    end
 
@@ -150,26 +168,26 @@ module regs_bank #(
       else begin
          if(slv_reg_wren) begin
             fifo_valid <= 0;
-            case(aw_addr[3:0])
-               4'h0: slv_reg_0  <= PWDATA;
-               4'h1: slv_reg_1  <= PWDATA;
-               4'h2: slv_reg_2  <= PWDATA;
-               4'h3: slv_reg_3  <= PWDATA;
-               4'h4: slv_reg_4  <= PWDATA;
-               4'h5: slv_reg_5  <= PWDATA;
+            case(aw_addr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB])
+               4'h0: slv_reg_0  <= reg_pwdata;
+               4'h1: slv_reg_1  <= reg_pwdata;
+               4'h2: slv_reg_2  <= reg_pwdata;
+               4'h3: slv_reg_3  <= reg_pwdata;
+               4'h4: slv_reg_4  <= reg_pwdata;
+               4'h5: slv_reg_5  <= reg_pwdata;
                4'h6: begin
-                  slv_reg_6  <= PWDATA;
+                  slv_reg_6  <= reg_pwdata;
                   fifo_valid <= 1     ;
                end
-               4'h7: slv_reg_7  <= PWDATA;
-               4'h8: slv_reg_8  <= PWDATA;
-               4'h9: slv_reg_9  <= PWDATA;
-               4'hA: slv_reg_10 <= PWDATA;
-               4'hB: slv_reg_11 <= PWDATA;
-               4'hC: slv_reg_12 <= PWDATA;
-               4'hD: slv_reg_13 <= PWDATA;
-               4'hE: slv_reg_14 <= PWDATA;
-               4'hF: slv_reg_15 <= PWDATA;
+               4'h7: slv_reg_7  <= reg_pwdata;
+               4'h8: slv_reg_8  <= reg_pwdata;
+               4'h9: slv_reg_9  <= reg_pwdata;
+               4'hA: slv_reg_10 <= reg_pwdata;
+               4'hB: slv_reg_11 <= reg_pwdata;
+               4'hC: slv_reg_12 <= reg_pwdata;
+               4'hD: slv_reg_13 <= reg_pwdata;
+               4'hE: slv_reg_14 <= reg_pwdata;
+               4'hF: slv_reg_15 <= reg_pwdata;
             endcase
          end
       end
@@ -180,30 +198,41 @@ module regs_bank #(
       APB Slave requests to read data from FSR or RBR with corresponding
       address to APB Bus.
    */
-   always @(*) begin
-      case(ar_addr[3:0])
-         4'h0: reg_data_out = slv_reg_0;
-         4'h1: reg_data_out = slv_reg_1;
-         4'h2: reg_data_out = slv_reg_2;
-         4'h3: reg_data_out = slv_reg_3;
-         4'h4: reg_data_out = slv_reg_4;
-         4'h5: reg_data_out = FSR;
-         4'h6: reg_data_out = slv_reg_6;
-         4'h7: reg_data_out = RBR;
-         4'h8: reg_data_out = slv_reg_8;
-         4'h9: reg_data_out = slv_reg_9;
-         4'hA: reg_data_out = slv_reg_10;
-         4'hB: reg_data_out = slv_reg_11;
-         4'hC: reg_data_out = slv_reg_12;
-         4'hD: reg_data_out = slv_reg_13;
-         4'hE: reg_data_out = slv_reg_14;
-         4'hF: reg_data_out = slv_reg_15;
+   always @(posedge PCLK) begin
+      case(ar_addr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB])
+         4'h0: reg_data_out <= slv_reg_0;
+         4'h1: reg_data_out <= slv_reg_1;
+         4'h2: reg_data_out <= slv_reg_2;
+         4'h3: reg_data_out <= slv_reg_3;
+         4'h4: reg_data_out <= slv_reg_4;
+         4'h5: reg_data_out <= reg_fsr;
+         4'h6: reg_data_out <= slv_reg_6;
+         4'h7: reg_data_out <= reg_rbr;
+         4'h8: reg_data_out <= slv_reg_8;
+         4'h9: reg_data_out <= slv_reg_9;
+         4'hA: reg_data_out <= slv_reg_10;
+         4'hB: reg_data_out <= slv_reg_11;
+         4'hC: reg_data_out <= slv_reg_12;
+         4'hD: reg_data_out <= slv_reg_13;
+         4'hE: reg_data_out <= slv_reg_14;
+         4'hF: reg_data_out <= slv_reg_15;
       endcase
-   endi
+   end
 
    always @(posedge PCLK, negedge PRESETN) begin
       if(!PRESETN) begin
+         reg_fsr <= 0;
+         reg_rbr <= 0;
+      end
+      else begin
+         reg_fsr <= FSR;
+         reg_rbr <= RBR;
+      end
+   end
+   always @(posedge PCLK, negedge PRESETN) begin
+      if(!PRESETN) begin
          apb_rdata <= APB_DATA_WIDTH'('b0);
+        //rdata_tmp <= APB_DATA_WIDTH'('b0);
       end
       else begin
          if(slv_reg_rden) begin
@@ -218,41 +247,40 @@ module regs_bank #(
       PSEL, PENABLE and PREADY is high.
       Otherwise, remaining the provious status.
    */
-   always @(posedge PCLK, negedge PRESETN) begin
-      if(!PRESETN) begin
-         apb_slverr <= 0;
-      end
-      else begin
-         if(PSEL && PENABLE && apb_ready) begin
-            if(PWRITE && aw_addr[3:0] == 4'h06 && FSR[rx_full_status]) begin
-               apb_slverr <= 1;
+   always @(*) begin
+      if(PSEL == 1 && PENABLE == 1 && apb_ready == 1) begin
+         if(PWRITE && PADDR[7:4] == 4'h6 && FSR[0] == 1) begin
+            apb_slverr = 1;
+         end
+         else begin
+            if(~PWRITE && ar_addr[7:4] == 4'h7 && FSR[rx_empty_status]) begin
+               apb_slverr = 1;
             end
             else begin
-               if(~PWRITE && ar_addr[3:0] == 4'h07 && FSR[tx_empty_status]) begin
-                  apb_slverr <= 1;
+               if(PADDR[7] == 1) begin
+                  apb_slverr = 1;
                end
                else begin
-                  if(PADDR[3] == 1) begin
-                     apb_slverr <= 1;
-                  end
+                  if(~PWRITE && write_domain) begin
+                     apb_slverr = 1;
+                  end         
                   else begin
-                     if(~PWRITE && write_domain) begin
-                        apb_slverr <= 1;
-                     end         
+                     if(PWRITE && read_domain) begin
+                        apb_slverr = 1;
+                     end
                      else begin
-                        if(PWRITE && read_domain) begin
-                           apb_slverr <= 1;
-                        end
-                        else begin
-                           apb_slverr <= 0;
-                        end
+                        apb_slverr = 0;
                      end
                   end
                end
             end
          end
       end
+      else begin
+         apb_slverr = apb_slverr;
+      end
    end
+   
 
    //user logic assignments
    assign MDR = slv_reg_0;
